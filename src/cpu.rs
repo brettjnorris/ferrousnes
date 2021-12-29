@@ -109,6 +109,16 @@ impl CPU {
                     self.sta(&opcode.mode);
                 }
 
+                /* STX */
+                0x8e | 0x86 | 0x96 => {
+                    self.stx(&opcode.mode);
+                }
+
+                /* STY */
+                0x8c | 0x84 | 0x94 => {
+                    self.sty(&opcode.mode);
+                }
+
                 0xAA => self.tax(),
                 0xE8 => self.inx(),
                 0x00 => return,
@@ -158,6 +168,16 @@ impl CPU {
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         self.mem_write(addr, self.register_a);
+    }
+
+    fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_x);
+    }
+
+    fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_y);
     }
 
     fn update_zero_and_negative_flags(&mut self, result: u8) {
@@ -288,5 +308,44 @@ mod test {
         cpu.load_and_run(vec![0xa4, 0x10, 0x00]);
 
         assert_eq!(cpu.register_y, 0x55);
+    }
+
+    #[test]
+    fn test_sta_to_memory() {
+        let mut cpu = CPU::new();
+        cpu.register_a = 0x55;
+
+        /* Skip load and run */
+        cpu.load(vec![0x85, 0x10, 0x00]);
+        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0x55);
+    }
+
+    #[test]
+    fn test_stx_to_memory() {
+        let mut cpu = CPU::new();
+        cpu.register_x = 0x55;
+
+        /* Skip load and run */
+        cpu.load(vec![0x86, 0x10, 0x00]);
+        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0x55);
+    }
+
+    #[test]
+    fn test_sty_to_memory() {
+        let mut cpu = CPU::new();
+        cpu.register_y = 0x55;
+
+        /* Skip load and run */
+        cpu.load(vec![0x84, 0x10, 0x00]);
+        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0x55);
     }
 }
