@@ -178,12 +178,75 @@ impl CPU {
                 0x8a => self.txa(),
                 0x98 => self.tya(),
                 0xe8 => self.inx(),
+
+                0x48 => self.stack_push(self.register_a),
+                0x08 => self.stack_push(self.status.bits()),
+                0x68 => self.pla(),
+                0x28 => self.plp(),
+
                 0x00 => return,
                 _ => todo!()
             }
 
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len - 1) as u16;
+            }
+        }
+    }
+
+    fn update_zero_and_negative_flags(&mut self, result: u8) {
+        if result == 0 {
+            self.status.insert(CpuFlags::ZERO);
+        } else {
+            self.status.remove(CpuFlags::ZERO);
+        }
+
+        if result >> 7 == 1 {
+            self.status.insert(CpuFlags::NEGATIV);
+        } else {
+            self.status.remove(CpuFlags::NEGATIV);
+        }
+    }
+
+    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+        match mode {
+            AddressingMode::Immediate => self.program_counter,
+            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
+            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
+            AddressingMode::ZeroPage_X => {
+                let pos = self.mem_read(self.program_counter);
+                pos.wrapping_add(self.register_x) as u16
+            }
+            AddressingMode::ZeroPage_Y => {
+                let pos = self.mem_read(self.program_counter);
+                pos.wrapping_add(self.register_y) as u16
+            }
+            AddressingMode::Absolute_X => {
+                let base = self.mem_read_u16(self.program_counter);
+                base.wrapping_add(self.register_x as u16)
+            }
+            AddressingMode::Absolute_Y => {
+                let base = self.mem_read_u16(self.program_counter);
+                base.wrapping_add(self.register_y as u16)
+            }
+            AddressingMode::Indirect_X => {
+                let base = self.mem_read(self.program_counter);
+
+                let ptr: u8 = (base as u8).wrapping_add(self.register_x);
+                let lo = self.mem_read(ptr as u16);
+                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
+                (hi as u16) << 8 | (lo as u16)
+            }
+            AddressingMode::Indirect_Y => {
+                let base = self.mem_read(self.program_counter);
+
+                let lo = self.mem_read(base as u16);
+                let hi = self.mem_read((base as u8).wrapping_add(1) as u16);
+                let deref_base = (hi as u16) << 8 | (lo as u16);
+                deref_base.wrapping_add(self.register_y as u16)
+            }
+            AddressingMode::NoneAddressing => {
+                panic!("mode {:?} is not supported", mode);
             }
         }
     }
@@ -255,61 +318,25 @@ impl CPU {
         self.mem_write(addr, self.register_y);
     }
 
-    fn update_zero_and_negative_flags(&mut self, result: u8) {
-        if result == 0 {
-            self.status.insert(CpuFlags::ZERO);
-        } else {
-            self.status.remove(CpuFlags::ZERO);
-        }
-
-        if result >> 7 == 1 {
-            self.status.insert(CpuFlags::NEGATIV);
-        } else {
-            self.status.remove(CpuFlags::NEGATIV);
-        }
+    fn pla(&mut self) {
+        let data = self.stack_pop();
+        self.set_register_a(data);
     }
 
-    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
-        match mode {
-            AddressingMode::Immediate => self.program_counter,
-            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
-            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
-            AddressingMode::ZeroPage_X => {
-                let pos = self.mem_read(self.program_counter);
-                pos.wrapping_add(self.register_x) as u16
-            }
-            AddressingMode::ZeroPage_Y => {
-                let pos = self.mem_read(self.program_counter);
-                pos.wrapping_add(self.register_y) as u16
-            }
-            AddressingMode::Absolute_X => {
-                let base = self.mem_read_u16(self.program_counter);
-                base.wrapping_add(self.register_x as u16)
-            }
-            AddressingMode::Absolute_Y => {
-                let base = self.mem_read_u16(self.program_counter);
-                base.wrapping_add(self.register_y as u16)
-            }
-            AddressingMode::Indirect_X => {
-                let base = self.mem_read(self.program_counter);
+    fn plp(&mut self) {
+        self.status.bits = self.stack_pop();
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::BREAK2);
+    }
 
-                let ptr: u8 = (base as u8).wrapping_add(self.register_x);
-                let lo = self.mem_read(ptr as u16);
-                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
-                (hi as u16) << 8 | (lo as u16)
-            }
-            AddressingMode::Indirect_Y => {
-                let base = self.mem_read(self.program_counter);
+    fn stack_push(&mut self, data: u8) {
+        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
 
-                let lo = self.mem_read(base as u16);
-                let hi = self.mem_read((base as u8).wrapping_add(1) as u16);
-                let deref_base = (hi as u16) << 8 | (lo as u16);
-                deref_base.wrapping_add(self.register_y as u16)
-            }
-            AddressingMode::NoneAddressing => {
-                panic!("mode {:?} is not supported", mode);
-            }
-        }
+    fn stack_pop(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        self.mem_read((STACK as u16) + self.stack_pointer as u16)
     }
 }
 
@@ -461,5 +488,65 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0x55);
+    }
+
+    #[test]
+    fn test_pha_push_a_to_stack() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0x55;
+        cpu.stack_pointer = STACK_RESET;
+
+        /* Skip load and run */
+        cpu.load(vec![0x48, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(((STACK as u16) + (cpu.stack_pointer as u16)) + 1), 0x55);
+    }
+
+    #[test]
+    fn test_php_push_status_to_stack() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0x55;
+        cpu.stack_pointer = STACK_RESET;
+
+        /* Skip load and run */
+        cpu.load(vec![0x08, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(((STACK as u16) + (cpu.stack_pointer as u16)) + 1), cpu.status.bits());
+    }
+
+    #[test]
+    fn test_pla_pop_stack_to_a() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0x55;
+        cpu.stack_pointer = STACK_RESET;
+
+        /* Skip load and run */
+        cpu.load(vec![0x48, 0xa9, 0x00, 0x68, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x55);
+    }
+
+    #[test]
+    fn test_plp_pop_stack_to_status() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1100101;
+        cpu.stack_pointer = STACK_RESET;
+
+        /* Skip load and run */
+        cpu.load(vec![0x48, 0x28, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.bits(), 0b1100101);
     }
 }
