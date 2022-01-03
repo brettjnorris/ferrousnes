@@ -1,14 +1,6 @@
 use std::collections::HashMap;
 use crate::opcodes;
-
-pub struct CPU {
-    pub register_a: u8,
-    pub register_x: u8,
-    pub register_y: u8,
-    pub status: u8,
-    pub program_counter: u16,
-    memory: [u8; 0xFFFF]
-}
+use crate::bus::Bus;
 
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -25,25 +17,19 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
-impl CPU {
-    pub fn new() -> Self {
-        CPU {
-            register_a: 0,
-            register_x: 0,
-            register_y: 0,
-            status: 0,
-            program_counter: 0,
-            memory: [0; 0xFFFF]
-        }
-    }
+pub struct CPU {
+    pub register_a: u8,
+    pub register_x: u8,
+    pub register_y: u8,
+    pub status: u8,
+    pub program_counter: u16,
+    pub bus: Bus
+}
 
-    fn mem_read(&self, addr: u16) -> u8 {
-        self.memory[addr as usize]
-    }
+pub trait Mem {
+    fn mem_read(&self, addr: u16) -> u8;
 
-    fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
-    }
+    fn mem_write(&mut self, addr: u16, data: u8);
 
     fn mem_read_u16(&self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
@@ -54,9 +40,39 @@ impl CPU {
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8;
-
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
+    }
+}
+
+impl Mem for CPU {
+    fn mem_read(&self, addr: u16) -> u8 {
+        self.bus.mem_read(addr)
+    }
+
+    fn mem_write(&mut self, addr: u16, data: u8) {
+        self.bus.mem_write(addr, data)
+    }
+
+    fn mem_read_u16(&self, pos: u16) -> u16 {
+        self.bus.mem_read_u16(pos)
+    }
+
+    fn mem_write_u16(&mut self, pos: u16, data: u16) {
+        self.bus.mem_write_u16(pos, data)
+    }
+}
+
+impl CPU {
+    pub fn new(bus: Bus) -> Self {
+        CPU {
+            register_a: 0,
+            register_x: 0,
+            register_y: 0,
+            status: 0,
+            program_counter: 0,
+            bus: bus
+        }
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -66,14 +82,15 @@ impl CPU {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+        for i in 0..(program.len() as u16) {
+            self.mem_write(0x0600 + i, program[i as usize]);
+        }
     }
 
     pub fn reset(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
-        self.status = 0;
+        self.register_y = 0;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
@@ -262,7 +279,8 @@ mod test {
 
     #[test]
     fn test_0xa9_lda_immediate_load_data() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
 
         assert_eq!(cpu.register_a, 0x05);
@@ -272,14 +290,16 @@ mod test {
 
     #[test]
     fn test_0xa9_lda_zero_flag() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert_eq!(cpu.status & 0b0000_0010, 0b10);
     }
 
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x0A, 0xaa, 0x00]);
 
         assert_eq!(cpu.register_x, 10);
@@ -287,7 +307,8 @@ mod test {
 
     #[test]
     fn test_0xa8_tay_move_a_to_y() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x0A, 0xa8, 0x00]);
 
         assert_eq!(cpu.register_y, 10);
@@ -295,7 +316,8 @@ mod test {
 
     #[test]
     fn test_0x8a_txa_move_x_to_a() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa2, 0x0a, 0x8a, 0x00]);
 
         assert_eq!(cpu.register_a, 10)
@@ -303,7 +325,8 @@ mod test {
 
     #[test]
     fn test_0x98_tya_move_y_to_a() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa0, 0x0a, 0x98, 0x00]);
 
         assert_eq!(cpu.register_a, 10)
@@ -311,7 +334,8 @@ mod test {
 
     #[test]
     fn test_5_ops_working_together() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
 
         assert_eq!(cpu.register_x, 0xc1)
@@ -319,7 +343,8 @@ mod test {
 
     #[test]
     fn test_inx_overflow() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0xe8, 0x00]);
 
         assert_eq!(cpu.register_x, 1)
@@ -327,7 +352,8 @@ mod test {
 
     #[test]
     fn test_lda_from_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x55);
         cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
 
@@ -336,7 +362,8 @@ mod test {
 
     #[test]
     fn test_ldx_from_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x55);
         cpu.load_and_run(vec![0xa6, 0x10, 0x00]);
 
@@ -345,7 +372,8 @@ mod test {
 
     #[test]
     fn test_ldy_from_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x55);
         cpu.load_and_run(vec![0xa4, 0x10, 0x00]);
 
@@ -354,7 +382,8 @@ mod test {
 
     #[test]
     fn test_sta_to_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.register_a = 0x55;
 
         /* Skip load and run */
@@ -367,7 +396,8 @@ mod test {
 
     #[test]
     fn test_stx_to_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.register_x = 0x55;
 
         /* Skip load and run */
@@ -380,7 +410,8 @@ mod test {
 
     #[test]
     fn test_sty_to_memory() {
-        let mut cpu = CPU::new();
+        let bus = Bus::new();
+        let mut cpu = CPU::new(bus);
         cpu.register_y = 0x55;
 
         /* Skip load and run */
