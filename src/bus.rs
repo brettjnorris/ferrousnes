@@ -59,7 +59,7 @@ impl Mem for Bus {
                 todo!("PPU is not yet supported")
             }
             0x8000..=0xFFFF => {
-                panic!("Attempt to write to Cartridge ROM space")
+                panic!("Attempt to write to Cartridge ROM space: {:?}", addr)
             }
             _ => {
                 println!("Ignoring mem write access at {}", addr);

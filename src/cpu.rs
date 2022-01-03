@@ -2,6 +2,35 @@ use std::collections::HashMap;
 use crate::opcodes;
 use crate::bus::Bus;
 
+bitflags! {
+    /// # Status Register (P) http://wiki.nesdev.com/w/index.php/Status_flags
+    ///
+    ///  7 6 5 4 3 2 1 0
+    ///  N V _ B D I Z C
+    ///  | |   | | | | +--- Carry Flag
+    ///  | |   | | | +----- Zero Flag
+    ///  | |   | | +------- Interrupt Disable
+    ///  | |   | +--------- Decimal Mode (not used on NES)
+    ///  | |   +----------- Break Command
+    ///  | +--------------- Overflow Flag
+    ///  +----------------- Negative Flag
+    ///
+
+    pub struct CpuFlags: u8 {
+        const CARRY             = 0b00000001;
+        const ZERO              = 0b00000010;
+        const INTERRUPT_DISABLE = 0b00000100;
+        const DECIMAL_MODE      = 0b00001000;
+        const BREAK             = 0b00010000;
+        const BREAK2            = 0b00100000;
+        const OVERFLOW          = 0b01000000;
+        const NEGATIV           = 0b10000000;
+    }
+}
+
+const STACK: u16 = 0x0100;
+const STACK_RESET: u8 = 0xfd;
+
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
@@ -21,8 +50,9 @@ pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
-    pub status: u8,
+    pub status: CpuFlags,
     pub program_counter: u16,
+    pub stack_pointer: u8,
     pub bus: Bus
 }
 
@@ -53,7 +83,6 @@ impl Mem for CPU {
     fn mem_write(&mut self, addr: u16, data: u8) {
         self.bus.mem_write(addr, data)
     }
-
     fn mem_read_u16(&self, pos: u16) -> u16 {
         self.bus.mem_read_u16(pos)
     }
@@ -69,7 +98,8 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
+            status: CpuFlags::from_bits_truncate(0b100100),
+            stack_pointer: STACK_RESET,
             program_counter: 0,
             bus: bus
         }
@@ -78,6 +108,7 @@ impl CPU {
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
+        self.program_counter = 0x0600;
         self.run();
     }
 
@@ -91,6 +122,8 @@ impl CPU {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
+        self.stack_pointer = STACK_RESET;
+        self.status = CpuFlags::from_bits_truncate(0b100100);
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
@@ -99,15 +132,19 @@ impl CPU {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         loop {
+            println!("program_counter: {:?}", self.program_counter);
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
             let program_counter_state = self.program_counter;
 
             let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} is not recognized", code));
 
+            println!("code: {:?}", code);
+            println!("opcode: {:?}", opcode);
             match code {
                 /* LDA */
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
+                    println!("LDA");
                     self.lda(&opcode.mode);
                 }
 
@@ -151,12 +188,15 @@ impl CPU {
         }
     }
 
-    fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr);
-
+    fn set_register_a(&mut self, value: u8) {
         self.register_a = value;
         self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn lda(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+        self.set_register_a(value);
     }
 
     fn ldx(&mut self, mode: &AddressingMode) {
@@ -217,15 +257,15 @@ impl CPU {
 
     fn update_zero_and_negative_flags(&mut self, result: u8) {
         if result == 0 {
-            self.status = self.status | 0b0000_0010;
+            self.status.insert(CpuFlags::ZERO);
         } else {
-            self.status = self.status & 0b1111_1101;
+            self.status.remove(CpuFlags::ZERO);
         }
 
-        if result & 0b1000_0000 != 0 {
-            self.status = self.status | 0b1000_0000;
+        if result >> 7 == 1 {
+            self.status.insert(CpuFlags::NEGATIV);
         } else {
-            self.status = self.status & 0b0111_1111;
+            self.status.remove(CpuFlags::NEGATIV);
         }
     }
 
@@ -285,8 +325,8 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
 
         assert_eq!(cpu.register_a, 5);
-        assert_eq!(cpu.status & 0b0000_0010, 0b00);
-        assert_eq!(cpu.status & 0b1000_0000, 0);
+        assert_eq!(cpu.status.bits() & 0b0000_0010, 0b00);
+        assert_eq!(cpu.status.bits() & 0b1000_0000, 0);
     }
 
     #[test]
@@ -294,7 +334,7 @@ mod test {
         let bus = Bus::new(test::test_rom());
         let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
-        assert_eq!(cpu.status & 0b0000_0010, 0b10);
+        assert_eq!(cpu.status.bits() & 0b0000_0010, 0b10);
     }
 
     #[test]
@@ -389,7 +429,7 @@ mod test {
 
         /* Skip load and run */
         cpu.load(vec![0x85, 0x10, 0x00]);
-        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+        cpu.program_counter = 0x0600;
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0x55);
@@ -403,7 +443,7 @@ mod test {
 
         /* Skip load and run */
         cpu.load(vec![0x86, 0x10, 0x00]);
-        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+        cpu.program_counter = 0x0600;
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0x55);
@@ -417,7 +457,7 @@ mod test {
 
         /* Skip load and run */
         cpu.load(vec![0x84, 0x10, 0x00]);
-        cpu.program_counter = cpu.mem_read_u16(0xFFFC);
+        cpu.program_counter = 0x0600;
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0x55);
