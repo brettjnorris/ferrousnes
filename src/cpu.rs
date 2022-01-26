@@ -139,8 +139,6 @@ impl CPU {
 
             let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} is not recognized", code));
 
-            println!("code: {:?}", code);
-            println!("opcode: {:?}", opcode);
             match code {
                 /* LDA */
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
@@ -184,6 +182,10 @@ impl CPU {
                 0x68 => self.pla(),
                 0x28 => self.plp(),
 
+                /* ASL */
+                0x0a => self.asl_accumulator(),
+                0x0e | 0x1e | 0x06 | 0x16 => self.asl_mem(&opcode.mode),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -205,6 +207,13 @@ impl CPU {
             self.status.insert(CpuFlags::NEGATIV);
         } else {
             self.status.remove(CpuFlags::NEGATIV);
+        }
+    }
+
+    fn update_carry_flag(&mut self, result: bool) {
+        match result {
+            true => self.status.insert(CpuFlags::CARRY),
+            false => self.status.remove(CpuFlags::CARRY),
         }
     }
 
@@ -254,6 +263,30 @@ impl CPU {
     fn set_register_a(&mut self, value: u8) {
         self.register_a = value;
         self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn asl_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = self.asl(value);
+        self.mem_write(addr, new_value);
+    }
+
+    fn asl_accumulator(&mut self) {
+        let value = self.register_a;
+        let new_value = self.asl(value);
+
+        self.register_a = new_value;
+    }
+
+    fn asl(&mut self, value: u8) -> u8 {
+        let carry: bool = value & 0b1000_0000 == 0b1000_0000;
+        self.update_carry_flag(carry);
+
+        let new_value: u8 = value << 1;
+        self.update_zero_and_negative_flags(new_value);
+        new_value
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -548,5 +581,35 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.status.bits(), 0b1100101);
+    }
+
+    #[test]
+    fn test_asl_accumulator_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x0a, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b0011_0010);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_asl_mem_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.mem_write(0x10, 0b1001_1001);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x0e, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0b0011_0010);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
     }
 }

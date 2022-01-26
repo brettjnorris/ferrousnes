@@ -25,12 +25,13 @@ impl OpCode {
 
 lazy_static! {
     pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
-        OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
+        OpCode::new(0x0a, "ASL", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x0e, "ASL", 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x1e, "ASL", 3, 7, AddressingMode::Absolute_X),
+        OpCode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPage_X),
 
-        OpCode::new(0xaa, "TAX", 1, 2, AddressingMode::NoneAddressing),
-        OpCode::new(0xa8, "TAY", 1, 2, AddressingMode::NoneAddressing),
-        OpCode::new(0x8a, "TXA", 1, 2, AddressingMode::NoneAddressing),
-        OpCode::new(0x98, "TYA", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
 
         OpCode::new(0xe8, "INX", 1, 2, AddressingMode::NoneAddressing),
 
@@ -75,6 +76,11 @@ lazy_static! {
         OpCode::new(0x8c, "STY", 3, 4, AddressingMode::Absolute),
         OpCode::new(0x84, "STY", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x94, "STY", 2, 4, AddressingMode::ZeroPage_X),
+
+        OpCode::new(0xaa, "TAX", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0xa8, "TAY", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x8a, "TXA", 1, 2, AddressingMode::NoneAddressing),
+        OpCode::new(0x98, "TYA", 1, 2, AddressingMode::NoneAddressing),
 
     ];
 
