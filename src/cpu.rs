@@ -46,6 +46,11 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
+pub enum Direction {
+    Left,
+    Right
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -190,6 +195,14 @@ impl CPU {
                 0x4a => self.lsr_accumulator(),
                 0x4e | 0x5e | 0x46 | 0x56 => self.lsr_mem(&opcode.mode),
 
+                /* ROL */
+                0x2a => self.rol_accumulator(),
+                0x2e | 0x3e | 0x26 | 0x36 => self.rol_mem(&opcode.mode),
+
+                /* ROR */
+                0x6a => self.ror_accumulator(),
+                0x6e | 0x7e | 0x66 | 0x76 => self.ror_mem(&opcode.mode),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -313,6 +326,57 @@ impl CPU {
         self.update_carry_flag(carry);
 
         let new_value: u8 = value >> 1;
+        self.update_zero_and_negative_flags(new_value);
+        new_value
+    }
+
+    fn rol_accumulator(&mut self) {
+        let value = self.register_a;
+        let new_value = self.rotate(value, &Direction::Left);
+
+        self.register_a = new_value;
+    }
+
+    fn rol_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = self.rotate(value, &Direction::Left);
+        self.mem_write(addr, new_value);
+    }
+
+    fn ror_accumulator(&mut self) {
+        let value = self.register_a;
+        let new_value = self.rotate(value, &Direction::Right);
+
+        self.register_a = new_value;
+    }
+
+    fn ror_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = self.rotate(value, &Direction::Right);
+        self.mem_write(addr, new_value);
+    }
+
+    fn rotate(&mut self, value: u8, direction: &Direction) -> u8 {
+        let carry: bool;
+        let new_value: u8;
+
+        match direction {
+            Direction::Left => {
+                carry = value & 0b1000_0000 == 0b1000_0000;
+                new_value = value.rotate_left(1);
+            }
+
+            Direction::Right => {
+                carry = value & 0b0000_0001 == 0b0000_0001;
+                new_value = value.rotate_right(1);
+            }
+        }
+
+        self.update_carry_flag(carry);
         self.update_zero_and_negative_flags(new_value);
         new_value
     }
@@ -668,6 +732,66 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0b0100_1100);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_rol_accumulator_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x2a, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b0011_0011);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_rol_mem_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.mem_write(0x10, 0b1001_1001);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x2e, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0b0011_0011);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_ror_accumulator_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x6a, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b1100_1100);
+        assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_ror_mem_with_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.mem_write(0x10, 0b1001_1001);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x6e, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0b1100_1100);
         assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
     }
 }
