@@ -137,7 +137,6 @@ impl CPU {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         loop {
-            println!("program_counter: {:?}", self.program_counter);
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
             let program_counter_state = self.program_counter;
@@ -147,7 +146,6 @@ impl CPU {
             match code {
                 /* LDA */
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
-                    println!("LDA");
                     self.lda(&opcode.mode);
                 }
 
@@ -202,6 +200,15 @@ impl CPU {
                 /* ROR */
                 0x6a => self.ror_accumulator(),
                 0x6e | 0x7e | 0x66 | 0x76 => self.ror_mem(&opcode.mode),
+
+                /* AND */
+                0x29 | 0x2d | 0x3d | 0x39 | 0x25 | 0x35 | 0x21 | 0x31 => self.and(&opcode.mode),
+
+                /* EOR */
+                0x49 | 0x4d | 0x5d | 0x59 | 0x45 | 0x55 | 0x41 | 0x51 => self.eor(&opcode.mode),
+
+                /* OR */
+                0x09 | 0x0d | 0x1d | 0x19 | 0x05 | 0x15 | 0x01 | 0x11 => self.ora(&opcode.mode),
 
                 0x00 => return,
                 _ => todo!()
@@ -280,6 +287,27 @@ impl CPU {
     fn set_register_a(&mut self, value: u8) {
         self.register_a = value;
         self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.set_register_a(value & self.register_a);
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.set_register_a(value ^ self.register_a);
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.set_register_a(value | self.register_a);
     }
 
     fn asl_mem(&mut self, mode: &AddressingMode) {
@@ -793,5 +821,47 @@ mod test {
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0b1100_1100);
         assert_eq!(cpu.status.bits() & 0b0000_0001, 0b0000_0001); // Carry flag should be set
+    }
+
+    #[test]
+    fn test_and_immediate() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x29, 0b1100_1100, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b1000_1000);
+    }
+
+    #[test]
+    fn test_eor_immediate() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x49, 0b1100_1100, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b0101_0101);
+    }
+
+    #[test]
+    fn test_ora_immediate() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.register_a = 0b1001_1001;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x09, 0b1100_1100, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 0b1101_1101);
     }
 }
