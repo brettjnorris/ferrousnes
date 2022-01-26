@@ -40,6 +40,9 @@ lazy_static! {
         OpCode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPage_X),
 
+        OpCode::new(0x2c, "BIT", 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage),
+
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
 
         OpCode::new(0x49, "EOR", 2, 2, AddressingMode::Immediate),

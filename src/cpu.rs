@@ -207,8 +207,11 @@ impl CPU {
                 /* EOR */
                 0x49 | 0x4d | 0x5d | 0x59 | 0x45 | 0x55 | 0x41 | 0x51 => self.eor(&opcode.mode),
 
-                /* OR */
+                /* ORA */
                 0x09 | 0x0d | 0x1d | 0x19 | 0x05 | 0x15 | 0x01 | 0x11 => self.ora(&opcode.mode),
+
+                /* BIT */
+                0x2c | 0x24 => self.bit(&opcode.mode),
 
                 0x00 => return,
                 _ => todo!()
@@ -238,6 +241,13 @@ impl CPU {
         match result {
             true => self.status.insert(CpuFlags::CARRY),
             false => self.status.remove(CpuFlags::CARRY),
+        }
+    }
+
+    fn update_overflow_flag(&mut self, result: u8) {
+        match result & 0b0100_0000 == 0b0100_0000 {
+            true => self.status.insert(CpuFlags::OVERFLOW),
+            false => self.status.remove(CpuFlags::OVERFLOW)
         }
     }
 
@@ -407,6 +417,16 @@ impl CPU {
         self.update_carry_flag(carry);
         self.update_zero_and_negative_flags(new_value);
         new_value
+    }
+
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = value & self.register_a;
+
+        self.update_zero_and_negative_flags(new_value);
+        self.update_overflow_flag(new_value);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -863,5 +883,21 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.register_a, 0b1101_1101);
+    }
+
+    #[test]
+    fn test_bit() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+        cpu.mem_write(0x10, 0b1100_0000);
+        cpu.register_a = 0b1111_1111;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x2c, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        println!("{}", cpu.status.bits());
+        assert_eq!(cpu.status.bits() & 0b1100_0001, 0b1100_0000);
     }
 }
