@@ -245,6 +245,21 @@ impl CPU {
                 /* INY */
                 0xc8 => self.iny(),
 
+                /* CLC */
+                0x18 => self.status.remove(CpuFlags::CARRY),
+
+                /* CLI */
+                0x58 => self.status.remove(CpuFlags::INTERRUPT_DISABLE),
+
+                /* CLV */
+                0xb8 => self.status.remove(CpuFlags::OVERFLOW),
+
+                /* SEC */
+                0x38 => self.status.insert(CpuFlags::CARRY),
+
+                /* SEI */
+                0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -494,7 +509,6 @@ impl CPU {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
 
-        self.update_carry_flag(true);
         self.add_to_register_a(((value as i8).wrapping_neg().wrapping_sub(1)) as u8);
     }
 
@@ -1043,7 +1057,7 @@ mod test {
         cpu.register_a = 0x1e;
         cpu.stack_pointer = STACK_RESET;
 
-        cpu.load(vec![0xe9, 0x0a, 0x00]);
+        cpu.load(vec![0x38, 0xe9, 0x0a, 0x00]);
         cpu.program_counter = 0x0600;
 
         cpu.run();
@@ -1140,5 +1154,80 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0x1f);
+    }
+
+    #[test]
+    fn test_clear_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.status.insert(CpuFlags::CARRY);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x18, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::CARRY), false);
+    }
+
+    #[test]
+    fn test_set_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.status.remove(CpuFlags::CARRY);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x38, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::CARRY), true);
+    }
+
+    #[test]
+    fn test_clear_interrupt_disable() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.status.insert(CpuFlags::INTERRUPT_DISABLE);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x58, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE), false);
+    }
+
+    #[test]
+    fn test_set_interrupt_disable() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.status.remove(CpuFlags::INTERRUPT_DISABLE);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x78, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE), true);
+    }
+
+    #[test]
+    fn test_clear_overflow() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.status.insert(CpuFlags::OVERFLOW);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xb8, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::OVERFLOW), false);
     }
 }
