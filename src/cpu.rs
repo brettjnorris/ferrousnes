@@ -178,7 +178,6 @@ impl CPU {
                 0xa8 => self.tay(),
                 0x8a => self.txa(),
                 0x98 => self.tya(),
-                0xe8 => self.inx(),
 
                 0x48 => self.stack_push(self.register_a),
                 0x08 => self.stack_push(self.status.bits()),
@@ -236,6 +235,15 @@ impl CPU {
 
                 /* DEY */
                 0x88 => self.dey(),
+
+                /* INC */
+                0xee | 0xfe | 0xe6 | 0xf6 => self.inc(&opcode.mode),
+
+                /* INX */
+                0xe8 => self.inx(),
+
+                /* INY */
+                0xc8 => self.iny(),
 
                 0x00 => return,
                 _ => todo!()
@@ -509,24 +517,38 @@ impl CPU {
 
         let new_value = value.wrapping_sub(1);
 
-        println!("addr: {}, value: {}, new_value: {}", addr, value, new_value);
-
         self.mem_write(addr, new_value);
         self.update_zero_and_negative_flags(new_value);
     }
 
     fn dex(&mut self) {
-        let new_value = self.register_x.wrapping_sub(1);
-
-        self.register_x = new_value;
-        self.update_zero_and_negative_flags(new_value);
+        self.register_x = self.register_x.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_x);
     }
 
     fn dey(&mut self) {
-        let new_value = self.register_y.wrapping_sub(1);
+        self.register_y = self.register_y.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
 
-        self.register_y = new_value;
+    fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = value.wrapping_add(1);
+
+        self.mem_write(addr, new_value);
         self.update_zero_and_negative_flags(new_value);
+    }
+
+    fn inx(&mut self) {
+        self.register_x = self.register_x.wrapping_add(1);
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    fn iny(&mut self) {
+        self.register_y = self.register_y.wrapping_add(1);
+        self.update_zero_and_negative_flags(self.register_y);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -571,10 +593,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
-    fn inx(&mut self) {
-        self.register_x = self.register_x.wrapping_add(1);
-        self.update_zero_and_negative_flags(self.register_x);
-    }
+
 
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
@@ -1106,5 +1125,20 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.register_y, 0x1e);
+    }
+
+    #[test]
+    fn test_inc() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.mem_write_u16(0x10, 0x1e);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xe6, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0x1f);
     }
 }
