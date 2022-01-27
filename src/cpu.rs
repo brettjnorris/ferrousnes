@@ -219,6 +219,15 @@ impl CPU {
                 /* SBC */
                 0xe9 | 0xed | 0xfd | 0xf9 | 0xe5 | 0xf5 | 0xe1 | 0xf1 => self.sbc(&opcode.mode),
 
+                /* CMP */
+                0xc9 | 0xcd | 0xdd | 0xd9 | 0xc5 | 0xd5 | 0xc1 | 0xd1 => self.compare(&opcode.mode, self.register_a),
+
+                /* CPX */
+                0xe0 | 0xec | 0xe4 => self.compare(&opcode.mode, self.register_x),
+
+                /* CPY */
+                0xc0 | 0xcc | 0xc4 => self.compare(&opcode.mode, self.register_y),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -470,6 +479,19 @@ impl CPU {
 
         self.update_carry_flag(true);
         self.add_to_register_a(((value as i8).wrapping_neg().wrapping_sub(1)) as u8);
+    }
+
+    fn compare(&mut self, mode: &AddressingMode, comparator: u8) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        if value <= comparator {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        self.update_zero_and_negative_flags(comparator.wrapping_sub(value));
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -973,6 +995,37 @@ mod test {
         cpu.run();
         assert_eq!(cpu.register_a, 20);
         assert_eq!(cpu.status.contains(CpuFlags::OVERFLOW), false);
+    }
+
+    #[test]
+    fn text_cmp_equal_carry() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.register_a = 0x1e;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xc9, 0x1e, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::ZERO), true);
+        assert_eq!(cpu.status.contains(CpuFlags::CARRY), true);
+    }
+
+    #[test]
+    fn text_cmp_negative() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.register_a = 0x1e;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xc9, 0x1f, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.status.contains(CpuFlags::NEGATIV), true);
     }
 
 }
