@@ -260,6 +260,12 @@ impl CPU {
                 /* SEI */
                 0x78 => self.status.insert(CpuFlags::INTERRUPT_DISABLE),
 
+                /* JMP Absolute */
+                0x4c => self.jmp_absolute(),
+
+                /* JMP Indirect */
+                0x6c => self.jmp_indirect(),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -607,8 +613,6 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
-
-
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         self.mem_write(addr, self.register_a);
@@ -643,6 +647,31 @@ impl CPU {
     fn stack_pop(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
         self.mem_read((STACK as u16) + self.stack_pointer as u16)
+    }
+
+    fn jmp_absolute(&mut self) {
+        let addr = self.mem_read_u16(self.program_counter);
+        println!("{}", addr);
+        self.program_counter = addr;
+    }
+
+    fn jmp_indirect(&mut self) {
+        let addr = self.mem_read_u16(self.program_counter);
+        // let indirect_ref = self.mem_read_u16(mem_address);
+        //6502 bug mode with with page boundary:
+        //  if address $3000 contains $40, $30FF contains $80, and $3100 contains $50,
+        // the result of JMP ($30FF) will be a transfer of control to $4080 rather than $5080 as you intended
+        // i.e. the 6502 took the low byte of the address from $30FF and the high byte from $3000
+
+        let indirect_ref = if addr & 0x00FF == 0x00FF {
+            let lo = self.mem_read(addr);
+            let hi = self.mem_read(addr & 0xFF00);
+            (hi as u16) << 8 | (lo as u16)
+        } else {
+            self.mem_read_u16(addr)
+        };
+
+        self.program_counter = indirect_ref;
     }
 }
 
