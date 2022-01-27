@@ -216,6 +216,9 @@ impl CPU {
                 /* ADC */
                 0x69 | 0x6d | 0x7d | 0x79 | 0x65 | 0x75 | 0x61 | 0x71 => self.adc(&opcode.mode),
 
+                /* SBC */
+                0xe9 | 0xed | 0xfd | 0xf9 | 0xe5 | 0xf5 | 0xe1 | 0xf1 => self.sbc(&opcode.mode),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -432,33 +435,41 @@ impl CPU {
         self.update_overflow_flag(new_value & 0b0100_0000 == 0b0100_0000);
     }
 
-    fn adc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(&mode);
-        let value = self.mem_read(addr);
-
+    fn add_to_register_a(&mut self, data: u8) {
         let sum = self.register_a as u16
-            + value as u16
+            + data as u16
             + (if self.status.contains(CpuFlags::CARRY) {
-                    1
-                } else {
-                    0
-                }) as u16;
+            1
+        } else {
+            0
+        }) as u16;
 
-        println!("value: {}, register_a: {}, carry: {}, sum: {}", value, self.register_a, self.status.contains(CpuFlags::CARRY), sum);
-
-        self.update_carry_flag(sum > 255);
+        self.update_carry_flag(sum > 0xff);
 
         let result = sum as u8;
 
-        if (value ^ result) & (result ^ self.register_a) & 0x80 != 0 {
-            println!("set overflow flag");
+        if (data ^ result) & (result ^ self.register_a) & 0x80 != 0 {
             self.status.insert(CpuFlags::OVERFLOW);
         } else {
-            println!("remove overflow flag");
             self.status.remove(CpuFlags::OVERFLOW);
         }
 
         self.set_register_a(result);
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.add_to_register_a(value);
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        self.update_carry_flag(true);
+        self.add_to_register_a(((value as i8).wrapping_neg().wrapping_sub(1)) as u8);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -936,7 +947,7 @@ mod test {
     fn test_adc_without_overflow() {
         let bus = Bus::new(test::test_rom());
         let mut cpu = CPU::new(bus);
-        cpu.mem_write(0x10, 0x10);
+
         cpu.register_a = 0x50;
         cpu.stack_pointer = STACK_RESET;
 
@@ -945,6 +956,22 @@ mod test {
 
         cpu.run();
         assert_eq!(cpu.register_a, 96);
+        assert_eq!(cpu.status.contains(CpuFlags::OVERFLOW), false);
+    }
+
+    #[test]
+    fn test_sbc_without_overflow() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.register_a = 0x1e;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xe9, 0x0a, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_a, 20);
         assert_eq!(cpu.status.contains(CpuFlags::OVERFLOW), false);
     }
 
