@@ -228,6 +228,15 @@ impl CPU {
                 /* CPY */
                 0xc0 | 0xcc | 0xc4 => self.compare(&opcode.mode, self.register_y),
 
+                /* DEC */
+                0xce | 0xde | 0xc6 | 0xd6 => self.dec(&opcode.mode),
+
+                /* DEX */
+                0xca => self.dex(),
+
+                /* DEY */
+                0x88 => self.dey(),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -492,6 +501,32 @@ impl CPU {
         }
 
         self.update_zero_and_negative_flags(comparator.wrapping_sub(value));
+    }
+
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(&mode);
+        let value = self.mem_read(addr);
+
+        let new_value = value.wrapping_sub(1);
+
+        println!("addr: {}, value: {}, new_value: {}", addr, value, new_value);
+
+        self.mem_write(addr, new_value);
+        self.update_zero_and_negative_flags(new_value);
+    }
+
+    fn dex(&mut self) {
+        let new_value = self.register_x.wrapping_sub(1);
+
+        self.register_x = new_value;
+        self.update_zero_and_negative_flags(new_value);
+    }
+
+    fn dey(&mut self) {
+        let new_value = self.register_y.wrapping_sub(1);
+
+        self.register_y = new_value;
+        self.update_zero_and_negative_flags(new_value);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -998,7 +1033,7 @@ mod test {
     }
 
     #[test]
-    fn text_cmp_equal_carry() {
+    fn test_cmp_equal_carry() {
         let bus = Bus::new(test::test_rom());
         let mut cpu = CPU::new(bus);
 
@@ -1014,7 +1049,7 @@ mod test {
     }
 
     #[test]
-    fn text_cmp_negative() {
+    fn test_cmp_negative() {
         let bus = Bus::new(test::test_rom());
         let mut cpu = CPU::new(bus);
 
@@ -1028,4 +1063,48 @@ mod test {
         assert_eq!(cpu.status.contains(CpuFlags::NEGATIV), true);
     }
 
+    #[test]
+    fn test_dec() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.mem_write_u16(0x10, 0x1f);
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xc6, 0x10, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0x1e);
+    }
+
+    #[test]
+    fn test_dex() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.register_x = 0x1f;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0xca, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_x, 0x1e);
+    }
+
+    #[test]
+    fn text_dey() {
+        let bus = Bus::new(test::test_rom());
+        let mut cpu = CPU::new(bus);
+
+        cpu.register_y = 0x1f;
+        cpu.stack_pointer = STACK_RESET;
+
+        cpu.load(vec![0x88, 0x00]);
+        cpu.program_counter = 0x0600;
+
+        cpu.run();
+        assert_eq!(cpu.register_y, 0x1e);
+    }
 }
