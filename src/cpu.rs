@@ -266,6 +266,30 @@ impl CPU {
                 /* JMP Indirect */
                 0x6c => self.jmp_indirect(),
 
+                /* BCC */
+                0x90 => self.bcc(),
+
+                /* BCS */
+                0xb0 => self.bcs(),
+
+                /* BEQ */
+                0xf0 => self.beq(),
+
+                /* BMI */
+                0x30 => self.bmi(),
+
+                /* BNE */
+                0xd0 => self.bne(),
+
+                /* BPL */
+                0x10 => self.bpl(),
+
+                /* BVC */
+                0x50 => self.bvc(),
+
+                /* BVS */
+                0x70 => self.bvs(),
+
                 0x00 => return,
                 _ => todo!()
             }
@@ -396,6 +420,7 @@ impl CPU {
         self.update_zero_and_negative_flags(new_value);
         new_value
     }
+
 
     fn lsr_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
@@ -649,9 +674,56 @@ impl CPU {
         self.mem_read((STACK as u16) + self.stack_pointer as u16)
     }
 
+    fn bcc(&mut self) {
+        if !self.status.contains(CpuFlags::CARRY) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bcs(&mut self) {
+        if self.status.contains(CpuFlags::CARRY) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn beq(&mut self) {
+        if self.status.contains(CpuFlags::ZERO) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bmi(&mut self) {
+        if self.status.contains(CpuFlags::NEGATIV) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bne(&mut self) {
+        if !self.status.contains(CpuFlags::ZERO) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bpl(&mut self) {
+        if !self.status.contains(CpuFlags::NEGATIV) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bvc(&mut self) {
+        if !self.status.contains(CpuFlags::OVERFLOW) {
+            self.jmp_absolute();
+        }
+    }
+
+    fn bvs(&mut self) {
+        if self.status.contains(CpuFlags::OVERFLOW) {
+            self.jmp_absolute();
+        }
+    }
+
     fn jmp_absolute(&mut self) {
         let addr = self.mem_read_u16(self.program_counter);
-        println!("{}", addr);
         self.program_counter = addr;
     }
 
