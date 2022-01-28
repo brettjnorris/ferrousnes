@@ -127,6 +127,8 @@ lazy_static! {
         OpCode::new(0x4c, "JMP", 3, 3, AddressingMode::NoneAddressing),
         OpCode::new(0x6c, "JMP", 3, 5, AddressingMode::NoneAddressing),
 
+        OpCode::new(0x20, "JSR", 3, 6, AddressingMode::NoneAddressing),
+
         OpCode::new(0xa9, "LDA", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xa5, "LDA", 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xb5, "LDA", 2, 4, AddressingMode::ZeroPage_X),
@@ -179,6 +181,10 @@ lazy_static! {
         OpCode::new(0x7e, "ROR", 3, 7, AddressingMode::Absolute_X),
         OpCode::new(0x66, "ROR", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x76, "ROR", 2, 6, AddressingMode::ZeroPage_X),
+
+        OpCode::new(0x40, "RTI", 1, 6, AddressingMode::NoneAddressing),
+
+        OpCode::new(0x60, "RTS", 1, 6, AddressingMode::NoneAddressing),
 
         OpCode::new(0xe9, "SBC", 2, 2, AddressingMode::Immediate),
         OpCode::new(0xed, "SBC", 3, 4, AddressingMode::Absolute),

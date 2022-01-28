@@ -277,6 +277,15 @@ impl CPU {
                 /* JMP Indirect */
                 0x6c => self.jmp_indirect(),
 
+                /* JSR */
+                0x20 => self.jsr(),
+
+                /* RTI */
+                0x40 => self.rti(),
+
+                /* RTS */
+                0x60 => self.rts(),
+
                 /* BCC */
                 0x90 => self.bcc(),
 
@@ -694,6 +703,20 @@ impl CPU {
         self.mem_read((STACK as u16) + self.stack_pointer as u16)
     }
 
+    fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        self.stack_push(hi);
+        self.stack_push(lo);
+    }
+
+    fn stack_pop_u16(&mut self) -> u16 {
+        let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
+
+        hi << 8 | lo
+    }
+
     fn bcc(&mut self) {
         if !self.status.contains(CpuFlags::CARRY) {
             self.jmp_absolute();
@@ -764,6 +787,23 @@ impl CPU {
         };
 
         self.program_counter = indirect_ref;
+    }
+
+    fn jsr(&mut self) {
+        self.stack_push_u16(self.program_counter + 1);
+        self.program_counter = self.mem_read_u16(self.program_counter);
+    }
+
+    fn rts(&mut self) {
+        self.program_counter = self.stack_pop_u16() + 1;
+    }
+
+    fn rti(&mut self) {
+        self.status.bits = self.stack_pop();
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::BREAK2);
+
+        self.program_counter = self.stack_pop_u16();
     }
 }
 
