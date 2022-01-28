@@ -176,7 +176,9 @@ impl CPU {
 
                 0xaa => self.tax(),
                 0xa8 => self.tay(),
+                0xba => self.tsx(),
                 0x8a => self.txa(),
+                0x9a => self.txs(),
                 0x98 => self.tya(),
 
                 0x48 => self.stack_push(self.register_a),
@@ -628,9 +630,18 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_y);
     }
 
+    fn tsx(&mut self) {
+        self.register_x = self.stack_pointer;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
     fn txa(&mut self) {
         self.register_a = self.register_x;
         self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    fn txs(&mut self) {
+        self.stack_pointer = self.register_x;
     }
 
     fn tya(&mut self) {
