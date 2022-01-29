@@ -113,7 +113,6 @@ impl CPU {
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
-        self.program_counter = 0x0600;
         self.run();
     }
 
@@ -121,6 +120,8 @@ impl CPU {
         for i in 0..(program.len() as u16) {
             self.mem_write(0x0600 + i, program[i as usize]);
         }
+
+        self.mem_write_u16(0xFFFC, 0x8600);
     }
 
     pub fn reset(&mut self) {
@@ -151,6 +152,9 @@ impl CPU {
             let program_counter_state = self.program_counter;
 
             let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} is not recognized", code));
+
+            println!("Program Counter: {:#X}   Opcode: {:#X}    Mnemonic: {}", self.program_counter, code, opcode.mnemonic);
+            println!("A: {:#X} |  X: {:#X}  |  Y: {:#X} | status: {:#b}", self.register_a, self.register_x, self.register_y, self.status.bits());
 
             match code {
                 /* LDA */
@@ -310,6 +314,9 @@ impl CPU {
                 /* BVS */
                 0x70 => self.bvs(),
 
+                0xea => {
+                    // do nothing
+                },
                 0x00 => return,
                 _ => todo!()
             }
@@ -576,6 +583,18 @@ impl CPU {
         self.update_zero_and_negative_flags(comparator.wrapping_sub(value));
     }
 
+    fn branch(&mut self, condition: bool) {
+        if condition {
+            let jump: i8 = self.mem_read(self.program_counter) as i8;
+            let jump_addr = self
+                .program_counter
+                .wrapping_add(1)
+                .wrapping_add(jump as u16);
+
+            self.program_counter = jump_addr;
+        }
+    }
+
     fn dec(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(&mode);
         let value = self.mem_read(addr);
@@ -718,51 +737,35 @@ impl CPU {
     }
 
     fn bcc(&mut self) {
-        if !self.status.contains(CpuFlags::CARRY) {
-            self.jmp_absolute();
-        }
+        self.branch(!self.status.contains(CpuFlags::CARRY));
     }
 
     fn bcs(&mut self) {
-        if self.status.contains(CpuFlags::CARRY) {
-            self.jmp_absolute();
-        }
+        self.branch(self.status.contains(CpuFlags::CARRY));
     }
 
     fn beq(&mut self) {
-        if self.status.contains(CpuFlags::ZERO) {
-            self.jmp_absolute();
-        }
+        self.branch(self.status.contains(CpuFlags::ZERO));
     }
 
     fn bmi(&mut self) {
-        if self.status.contains(CpuFlags::NEGATIV) {
-            self.jmp_absolute();
-        }
+        self.branch(self.status.contains(CpuFlags::NEGATIV));
     }
 
     fn bne(&mut self) {
-        if !self.status.contains(CpuFlags::ZERO) {
-            self.jmp_absolute();
-        }
+        self.branch(!self.status.contains(CpuFlags::ZERO));
     }
 
     fn bpl(&mut self) {
-        if !self.status.contains(CpuFlags::NEGATIV) {
-            self.jmp_absolute();
-        }
+        self.branch(!self.status.contains(CpuFlags::NEGATIV));
     }
 
     fn bvc(&mut self) {
-        if !self.status.contains(CpuFlags::OVERFLOW) {
-            self.jmp_absolute();
-        }
+        self.branch(!self.status.contains(CpuFlags::OVERFLOW))
     }
 
     fn bvs(&mut self) {
-        if self.status.contains(CpuFlags::OVERFLOW) {
-            self.jmp_absolute();
-        }
+        self.branch(self.status.contains(CpuFlags::OVERFLOW))
     }
 
     fn jmp_absolute(&mut self) {

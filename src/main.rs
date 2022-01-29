@@ -17,7 +17,6 @@ use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use rand::Rng;
-use sdl2::event::WindowEvent::None;
 
 fn color(byte: u8) -> Color {
     match byte {
@@ -100,7 +99,7 @@ fn main() {
     let bytes: Vec<u8> = std::fs::read("snake.nes").unwrap();
     let rom = Rom::new(&bytes).unwrap();
 
-    let mut bus = Bus::new(rom);
+    let bus = Bus::new(rom);
     let mut cpu = CPU::new(bus);
     cpu.reset();
 
@@ -109,12 +108,6 @@ fn main() {
 
     // Run the game cycle
     cpu.run_with_callback(move |cpu| {
-        // TODO:
-        // read user input and write it to mem[0xFF]
-        // update mem[0xFE] with new Random Number
-        // read mem mapped screen state
-        // render screen state
-
         handle_user_input(cpu, &mut event_pump);
         cpu.mem_write(0xfe, rng.gen_range(1, 16));
 
@@ -125,8 +118,5 @@ fn main() {
 
             canvas.present();
         }
-
-
-        ::std::thread::sleep(std::time::Duration::new(0, 70_000));
     })
 }

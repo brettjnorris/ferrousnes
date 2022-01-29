@@ -156,6 +156,8 @@ lazy_static! {
         OpCode::new(0x46, "LSR", 2, 5, AddressingMode::ZeroPage),
         OpCode::new(0x56, "LSR", 2, 6, AddressingMode::ZeroPage_X),
 
+        OpCode::new(0xea, "NOP", 1, 2, AddressingMode::NoneAddressing),
+
         OpCode::new(0x09, "ORA", 2, 2, AddressingMode::Immediate),
         OpCode::new(0x0d, "ORA", 3, 4, AddressingMode::Absolute),
         OpCode::new(0x1d, "ORA", 3, 4/*+1 if page crossed*/, AddressingMode::Absolute_X),
